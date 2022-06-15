@@ -1,48 +1,91 @@
 package com.example.shoppinglist.presentation
 
+import android.content.Intent
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
-import com.example.shoppinglist.R
-import com.example.shoppinglist.domain.ShopItem
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.example.shoppinglist.databinding.ActivityMainBinding
+import com.example.shoppinglist.presentation.adapter.ShoppListAdapter
 
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var binding: ActivityMainBinding
+    private lateinit var shopListAdapter: ShoppListAdapter
     private lateinit var viewModel: MainViewModel
-    private lateinit var llShopList: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        llShopList = findViewById(R.id.ll_shop_list)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        setupRecyclerView()
         viewModel = ViewModelProvider(this).get(MainViewModel::class.java)
         viewModel.shopList.observe(this) {
-            showList(it)
+            shopListAdapter.shopLists = it
+        }
+        binding.buttonAddShopItem.setOnClickListener {
+            val intent = ShopItemActivity.moveAdd(this)
+            startActivity(intent)
         }
     }
 
-    private fun showList(list: List<ShopItem>) {
-        llShopList.removeAllViews()
-        for (shopItem in list) {
-            val itemShopId = if (shopItem.enabled) {
-                R.layout.item_shop_enabled
-            } else {
-                R.layout.item_shop_disabled
+    private fun setupRecyclerView() {
+        shopListAdapter = ShoppListAdapter()
+        binding.apply {
+            with(recyclerview) {
+                layoutManager = LinearLayoutManager(this@MainActivity)
+                adapter = shopListAdapter
+                recycledViewPool.setMaxRecycledViews(
+                    ShoppListAdapter.VIEW_TYPE_ENABLED,
+                    ShoppListAdapter.MAX_POOL_SIZE
+                )
+                recycledViewPool.setMaxRecycledViews(
+                    ShoppListAdapter.VIEW_TYPE_DISABLED,
+                    ShoppListAdapter.MAX_POOL_SIZE
+                )
             }
-            val view = LayoutInflater.from(this)
-                .inflate(itemShopId, llShopList, false)
-            val tvName = view.findViewById<TextView>(R.id.tv_name)
-            val tvCount = view.findViewById<TextView>(R.id.tv_count)
-            tvName.text = shopItem.name
-            tvCount.text = shopItem.count.toString()
-            view.setOnLongClickListener {
-                viewModel.changeEnableState(shopItem)
-                true
+        }
+        setupLongClickListener()
+        setupClickListener()
+        setupSwipeListener(binding.recyclerview)
+    }
+
+    private fun setupSwipeListener(recyclerView: RecyclerView) {
+        val callback = object : ItemTouchHelper.SimpleCallback(
+            0,
+            ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT
+        ) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean {
+                return false
             }
-            llShopList.addView(view)
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val item = shopListAdapter.shopLists[viewHolder.adapterPosition]
+                viewModel.deleteShopItem(item)
+            }
+        }
+        val itemTouchHelper = ItemTouchHelper(callback)
+        itemTouchHelper.attachToRecyclerView(recyclerView)
+    }
+
+    private fun setupClickListener() {
+        shopListAdapter.onShopItemClickListener = {
+            val intent = ShopItemActivity.modeEdit(this, it.id)
+            startActivity(intent)
+        }
+    }
+
+    private fun setupLongClickListener() {
+        shopListAdapter.onShopItemLongClickListener = {
+            viewModel.changeEnableState(it)
         }
     }
 }
+
